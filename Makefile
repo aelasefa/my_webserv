@@ -5,7 +5,9 @@ CXXFLAGS = -Wall -Wextra -Werror -std=c++98
 
 SRCS = main.cpp \
        network/Socket.cpp \
-       network/Server.cpp
+       network/Server.cpp \
+       network/Client.cpp \
+       core/EventLoop.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 
