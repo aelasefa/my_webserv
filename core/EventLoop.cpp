@@ -8,6 +8,7 @@
 
 EventLoop::EventLoop(int serverFd) : _serverFd(serverFd), _maxFd(serverFd)
 {
+    
 }
 
 void EventLoop::run()
