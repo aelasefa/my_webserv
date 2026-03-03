@@ -36,6 +36,8 @@ void Server::start()
     }
     
     // 4. Set listening socket non-blocking
+    // F_SETFL: Set file status flags
+    // O_NONBLOCK: Non-blocking mode (operations return immediately instead of waiting)
     fcntl(_socket.getFd(), F_SETFL, O_NONBLOCK);
     
     std::cout << "Server listening on port " << _port << std::endl;

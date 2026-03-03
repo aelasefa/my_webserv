@@ -17,9 +17,11 @@ void EventLoop::run()
     while (true)
     {
         // 1. Clear read set
+        // FD_ZERO: Initialize/clear a file descriptor set to empty
         FD_ZERO(&_readFds);
 
         // 2. Add server_fd
+        // FD_SET: Add a file descriptor to a set
         FD_SET(_serverFd, &_readFds);
 
         // 3. Add all client fds and calculate max_fd
@@ -41,6 +43,7 @@ void EventLoop::run()
         }
 
         // 6. If server_fd is ready, handle new connection
+        // FD_ISSET: Check if a file descriptor is in a set (returns true if ready)
         if (FD_ISSET(_serverFd, &_readFds))
         {
             handleNewConnection();
@@ -66,6 +69,8 @@ void EventLoop::handleNewConnection()
     if (clientFd >= 0)
     {
         // Set non-blocking
+        // F_SETFL: Set file status flags
+        // O_NONBLOCK: Non-blocking mode (operations return immediately)
         fcntl(clientFd, F_SETFL, O_NONBLOCK);
         
         // Create Client object and add to vector

@@ -9,15 +9,17 @@ Socket::Socket() : _fd(-1), _port(0)
 
 bool Socket::create()
 {
+    // AF_INET: IPv4 address family
+    // SOCK_STREAM: TCP connection-oriented socket
     _fd = socket(AF_INET, SOCK_STREAM, 0);
     return _fd != -1;
 }
 
 bool Socket::bindSocket()
 {
-    _address.sin_family = AF_INET;
-    _address.sin_addr.s_addr = INADDR_ANY;
-    _address.sin_port = htons(_port);
+    _address.sin_family = AF_INET;           // IPv4 address family
+    _address.sin_addr.s_addr = INADDR_ANY;   // Accept connections on any interface
+    _address.sin_port = htons(_port);        // htons: Convert port to network byte order
     return bind(_fd, (struct sockaddr *)&_address, sizeof(_address)) != -1;
 }
 
