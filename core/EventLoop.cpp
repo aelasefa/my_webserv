@@ -1,4 +1,5 @@
 #include "EventLoop.hpp"
+#include "../http/HttpRequest.hpp"
 #include <sys/socket.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -86,12 +87,26 @@ void EventLoop::handleClientData(Client* client)
     // 1. Read data
     ssize_t bytesReceived = recv(client->getFd(), buffer, sizeof(buffer) - 1, 0);
     
-    // 2. If bytes > 0, append to buffer and print
+    // 2. If bytes > 0, append to buffer and check for complete request
     if (bytesReceived > 0)
     {
         buffer[bytesReceived] = '\0';
         client->appendToBuffer(buffer);
-        std::cout << "Received from fd " << client->getFd() << ":\n" << buffer << std::endl;
+        
+        // Check if HTTP request is complete (headers end with \r\n\r\n)
+        const std::string& clientBuffer = client->getBuffer();
+        if (clientBuffer.find("\r\n\r\n") != std::string::npos)
+        {
+            HttpRequest request;
+            request.parse(clientBuffer);
+            
+            // Debug output
+            std::cout << "[DEBUG] Method: " << request.getMethod() << std::endl;
+            std::cout << "[DEBUG] URI: " << request.getUri() << std::endl;
+            std::cout << "[DEBUG] Version: " << request.getVersion() << std::endl;
+            
+            client->clearBuffer();
+        }
     }
     // 3. If bytes == 0, client disconnected
     else if (bytesReceived == 0)
