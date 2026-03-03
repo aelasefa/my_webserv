@@ -112,4 +112,5 @@ void HttpRequest::parse(const std::string& rawRequest)
     std::ostringstream bodyStream;
     bodyStream << stream.rdbuf();
     _body = bodyStream.str();
+    
 }
