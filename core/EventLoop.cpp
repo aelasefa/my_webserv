@@ -18,15 +18,12 @@ void EventLoop::run()
 {
     while (true)
     {
-        // 1. Clear read set
         // FD_ZERO: Initialize/clear a file descriptor set to empty
         FD_ZERO(&_readFds);
 
-        // 2. Add server_fd
         // FD_SET: Add a file descriptor to a set
         FD_SET(_serverFd, &_readFds);
 
-        // 3. Add all client fds and calculate max_fd
         _maxFd = _serverFd;
         for (size_t i = 0; i < _clients.size(); i++)
         {
@@ -36,7 +33,6 @@ void EventLoop::run()
                 _maxFd = clientFd;
         }
 
-        // 5. Call select
         int activity = select(_maxFd + 1, &_readFds, NULL, NULL, NULL);
         if (activity < 0)
         {
@@ -44,14 +40,12 @@ void EventLoop::run()
             continue;
         }
 
-        // 6. If server_fd is ready, handle new connection
         // FD_ISSET: Check if a file descriptor is in a set (returns true if ready)
         if (FD_ISSET(_serverFd, &_readFds))
         {
             handleNewConnection();
         }
 
-        // 7. Check each client for activity
         for (size_t i = 0; i < _clients.size(); i++)
         {
             if (FD_ISSET(_clients[i]->getFd(), &_readFds))
@@ -64,18 +58,15 @@ void EventLoop::run()
 
 void EventLoop::handleNewConnection()
 {
-    // 1. Accept the new connection
     int clientFd = accept(_serverFd, NULL, NULL);
     
-    // 2. Check if valid
     if (clientFd >= 0)
     {
         // Set non-blocking
         // F_SETFL: Set file status flags
-        // O_NONBLOCK: Non-blocking mode (operations return immediately)
+        // O_NONBLOCK: Non-blocking mode 
         fcntl(clientFd, F_SETFL, O_NONBLOCK);
         
-        // Create Client object and add to vector
         Client* newClient = new Client(clientFd);
         _clients.push_back(newClient);
         
@@ -91,16 +82,13 @@ void EventLoop::handleClientData(Client* client)
 {
     char buffer[4096];
     
-    // 1. Read data
     ssize_t bytesReceived = recv(client->getFd(), buffer, sizeof(buffer) - 1, 0);
     
-    // 2. If bytes > 0, append to buffer and check for complete request
     if (bytesReceived > 0)
     {
         buffer[bytesReceived] = '\0';
         client->appendToBuffer(buffer);
         
-        // Check if HTTP request is complete (headers end with \r\n\r\n)
         const std::string& clientBuffer = client->getBuffer();
         if (clientBuffer.find("\r\n\r\n") != std::string::npos)
         {
@@ -116,33 +104,28 @@ void EventLoop::handleClientData(Client* client)
             HttpResponse response;
             response.setVersion("HTTP/1.1");
             
-            // Determine response based on URI
             std::string uri = request.getUri();
             std::string responseBody;
             
             if (uri == "/" || uri == "")
             {
-                // GET / → 200 OK with test content
                 response.setStatus("200 OK");
                 responseBody = "Hello, World! Welcome to Webserv.";
             }
             else
             {
-                // Missing file → 404 Not Found
                 response.setStatus("404 Not Found");
                 responseBody = "404 Not Found: The requested resource was not found.";
             }
             
             response.setBody(responseBody);
             
-            // Set headers
             char contentLengthStr[32];
             snprintf(contentLengthStr, sizeof(contentLengthStr), "%lu", responseBody.length());
             response.addHeader("Content-Length", contentLengthStr);
             response.addHeader("Content-Type", "text/plain");
             response.addHeader("Connection", "close");
             
-            // Build raw response
             std::string rawResponse = response.buildRawResponse();
             
             // Send response to client
@@ -159,13 +142,11 @@ void EventLoop::handleClientData(Client* client)
             client->clearBuffer();
         }
     }
-    // 3. If bytes == 0, client disconnected
     else if (bytesReceived == 0)
     {
         std::cout << "Client disconnected: fd " << client->getFd() << std::endl;
         removeClient(client);
     }
-    // 4. If bytes < 0, error
     else
     {
         std::cerr << "recv() error on fd " << client->getFd() << ": " << strerror(errno) << std::endl;
@@ -177,18 +158,17 @@ void EventLoop::removeClient(Client* client)
 {
     int fd = client->getFd();
     
-    // Remove from vector
     for (std::vector<Client*>::iterator it = _clients.begin(); it != _clients.end(); ++it)
     {
         if (*it == client)
         {
-            delete *it;  // This will close the fd in Client destructor
+            delete *it;  
             _clients.erase(it);
             break;
         }
     }
     
-    // Update max_fd
+ 
     _maxFd = _serverFd;
     for (size_t i = 0; i < _clients.size(); i++)
     {
