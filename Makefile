@@ -8,7 +8,8 @@ SRCS = main.cpp \
        network/Server.cpp \
        network/Client.cpp \
        core/EventLoop.cpp \
-       http/HttpRequest.cpp
+       http/HttpRequest.cpp \
+       http/HttpResponse.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 

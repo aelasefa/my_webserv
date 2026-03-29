@@ -1,11 +1,13 @@
 #include "EventLoop.hpp"
 #include "../http/HttpRequest.hpp"
+#include "../http/HttpResponse.hpp"
 #include <sys/socket.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <iostream>
 #include <cstring>
 #include <cerrno>
+#include <cstdio>
 
 EventLoop::EventLoop(int serverFd) : _serverFd(serverFd), _maxFd(serverFd)
 {
@@ -109,6 +111,50 @@ void EventLoop::handleClientData(Client* client)
             std::cout << "[DEBUG] Method: " << request.getMethod() << std::endl;
             std::cout << "[DEBUG] URI: " << request.getUri() << std::endl;
             std::cout << "[DEBUG] Version: " << request.getVersion() << std::endl;
+            
+            // Create and build response
+            HttpResponse response;
+            response.setVersion("HTTP/1.1");
+            
+            // Determine response based on URI
+            std::string uri = request.getUri();
+            std::string responseBody;
+            
+            if (uri == "/" || uri == "")
+            {
+                // GET / → 200 OK with test content
+                response.setStatus("200 OK");
+                responseBody = "Hello, World! Welcome to Webserv.";
+            }
+            else
+            {
+                // Missing file → 404 Not Found
+                response.setStatus("404 Not Found");
+                responseBody = "404 Not Found: The requested resource was not found.";
+            }
+            
+            response.setBody(responseBody);
+            
+            // Set headers
+            char contentLengthStr[32];
+            snprintf(contentLengthStr, sizeof(contentLengthStr), "%lu", responseBody.length());
+            response.addHeader("Content-Length", contentLengthStr);
+            response.addHeader("Content-Type", "text/plain");
+            response.addHeader("Connection", "close");
+            
+            // Build raw response
+            std::string rawResponse = response.buildRawResponse();
+            
+            // Send response to client
+            ssize_t bytesSent = send(client->getFd(), rawResponse.c_str(), rawResponse.length(), 0);
+            if (bytesSent < 0)
+            {
+                std::cerr << "send() error on fd " << client->getFd() << ": " << strerror(errno) << std::endl;
+            }
+            else
+            {
+                std::cout << "[DEBUG] Sent response: " << bytesSent << " bytes" << std::endl;
+            }
             
             client->clearBuffer();
         }

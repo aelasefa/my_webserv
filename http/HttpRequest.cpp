@@ -59,9 +59,6 @@ const std::string& HttpRequest::getBody() const
     return _body;
 }
 
-#include <sstream>
-#include <stdexcept>
-
 void HttpRequest::parse(const std::string& rawRequest)
 {
     _method.clear();
