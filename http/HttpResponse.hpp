@@ -28,7 +28,10 @@ public:
     const std::map<std::string, std::string>& getHeaders() const;
     const std::string& getBody() const;
     
-    // Build the raw HTTP response string
+    // Build the HTTP response string
+    std::string buildResponse() const;
+
+    // Backward-compatible alias
     std::string buildRawResponse() const;
 };
 

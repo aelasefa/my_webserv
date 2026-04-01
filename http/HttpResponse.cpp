@@ -49,7 +49,7 @@ const std::string& HttpResponse::getBody() const
     return _body;
 }
 
-std::string HttpResponse::buildRawResponse() const
+std::string HttpResponse::buildResponse() const
 {
     std::ostringstream response;
     
@@ -69,4 +69,9 @@ std::string HttpResponse::buildRawResponse() const
     response << _body;
     
     return response.str();
+}
+
+std::string HttpResponse::buildRawResponse() const
+{
+    return buildResponse();
 }

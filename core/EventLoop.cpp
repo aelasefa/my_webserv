@@ -5,9 +5,32 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <cstring>
 #include <cerrno>
 #include <cstdio>
+
+namespace
+{
+std::string getContentType(const std::string& path)
+{
+    size_t dotPos = path.find_last_of('.');
+    if (dotPos == std::string::npos)
+        return "text/plain";
+
+    const std::string extension = path.substr(dotPos);
+    if (extension == ".html")
+        return "text/html";
+    if (extension == ".css")
+        return "text/css";
+    if (extension == ".js")
+        return "application/javascript";
+    if (extension == ".txt")
+        return "text/plain";
+    return "text/plain";
+}
+}
 
 EventLoop::EventLoop(int serverFd) : _serverFd(serverFd), _maxFd(serverFd)
 {
@@ -103,30 +126,59 @@ void EventLoop::handleClientData(Client* client)
             // Create and build response
             HttpResponse response;
             response.setVersion("HTTP/1.1");
-            
-            std::string uri = request.getUri();
+
+            const std::string method = request.getMethod();
+            const std::string uri = request.getUri();
             std::string responseBody;
-            
-            if (uri == "/" || uri == "")
+
+            if (method != "GET")
             {
-                response.setStatus("200 OK");
-                responseBody = "Hello, World! Welcome to Webserv.";
+                response.setStatus("405 Method Not Allowed");
+                responseBody = "405 Method Not Allowed";
+                response.setBody(responseBody);
+                response.addHeader("Content-Type", "text/plain");
+            }
+            else if (uri.find("..") != std::string::npos)
+            {
+                response.setStatus("403 Forbidden");
+                responseBody = "403 Forbidden";
+                response.setBody(responseBody);
+                response.addHeader("Content-Type", "text/plain");
             }
             else
             {
-                response.setStatus("404 Not Found");
-                responseBody = "404 Not Found: The requested resource was not found.";
+                std::string path;
+                if (uri == "/" || uri.empty())
+                    path = "./www/index.html";
+                else
+                    path = "./www" + uri;
+
+                std::ifstream file(path.c_str(), std::ios::in | std::ios::binary);
+                if (!file)
+                {
+                    response.setStatus("404 Not Found");
+                    responseBody = "404 Not Found";
+                    response.setBody(responseBody);
+                    response.addHeader("Content-Type", "text/plain");
+                }
+                else
+                {
+                    std::ostringstream fileBuffer;
+                    fileBuffer << file.rdbuf();
+                    responseBody = fileBuffer.str();
+
+                    response.setStatus("200 OK");
+                    response.setBody(responseBody);
+                    response.addHeader("Content-Type", getContentType(path));
+                }
             }
-            
-            response.setBody(responseBody);
-            
-            char contentLengthStr[32];
-            snprintf(contentLengthStr, sizeof(contentLengthStr), "%lu", responseBody.length());
-            response.addHeader("Content-Length", contentLengthStr);
-            response.addHeader("Content-Type", "text/plain");
+
+            std::ostringstream contentLength;
+            contentLength << response.getBody().size();
+            response.addHeader("Content-Length", contentLength.str());
             response.addHeader("Connection", "close");
-            
-            std::string rawResponse = response.buildRawResponse();
+
+            std::string rawResponse = response.buildResponse();
             
             // Send response to client
             ssize_t bytesSent = send(client->getFd(), rawResponse.c_str(), rawResponse.length(), 0);
