@@ -30,6 +30,14 @@ std::string getContentType(const std::string& path)
         return "text/plain";
     return "text/plain";
 }
+
+bool isHiddenUri(const std::string& uri)
+{
+    size_t start = 0;
+    if (!uri.empty() && uri[0] == '/')
+        start = 1;
+    return (start < uri.size() && uri[start] == '.');
+}
 }
 
 EventLoop::EventLoop(int serverFd) : _serverFd(serverFd), _maxFd(serverFd)
@@ -138,12 +146,12 @@ void EventLoop::handleClientData(Client* client)
                 response.setBody(responseBody);
                 response.addHeader("Content-Type", "text/plain");
             }
-            else if (uri.find("..") != std::string::npos)
+            else if (uri.find("..") != std::string::npos || isHiddenUri(uri))
             {
                 response.setStatus("403 Forbidden");
-                responseBody = "403 Forbidden";
+                responseBody = "<h1>403 Forbidden</h1>";
                 response.setBody(responseBody);
-                response.addHeader("Content-Type", "text/plain");
+                response.addHeader("Content-Type", "text/html");
             }
             else
             {
