@@ -10,6 +10,7 @@
 #include <cstring>
 #include <cerrno>
 #include <cstdio>
+#include <sys/stat.h>
 
 namespace
 {
@@ -37,6 +38,66 @@ bool isHiddenUri(const std::string& uri)
     if (!uri.empty() && uri[0] == '/')
         start = 1;
     return (start < uri.size() && uri[start] == '.');
+}
+
+size_t parseContentLengthHeader(const std::string& requestHeaders)
+{
+    std::istringstream headerStream(requestHeaders);
+    std::string line;
+
+    // Skip request line
+    std::getline(headerStream, line);
+
+    while (std::getline(headerStream, line))
+    {
+        if (!line.empty() && line[line.size() - 1] == '\r')
+            line.erase(line.size() - 1);
+        if (line.empty())
+            break;
+
+        size_t colonPos = line.find(':');
+        if (colonPos == std::string::npos)
+            continue;
+
+        std::string key = line.substr(0, colonPos);
+        std::string value = line.substr(colonPos + 1);
+        size_t start = value.find_first_not_of(" \t");
+        if (start != std::string::npos)
+            value = value.substr(start);
+        else
+            value.clear();
+
+        if (key == "Content-Length")
+        {
+            std::istringstream iss(value);
+            size_t length = 0;
+            char extra = 0;
+            if ((iss >> length) && !(iss >> extra))
+                return length;
+            return 0;
+        }
+    }
+    return 0;
+}
+
+std::string stripUriParams(const std::string& uri)
+{
+    size_t queryPos = uri.find('?');
+    if (queryPos == std::string::npos)
+        return uri;
+    return uri.substr(0, queryPos);
+}
+
+bool isBlockedUri(const std::string& uri)
+{
+    return uri.find("..") != std::string::npos || isHiddenUri(uri);
+}
+
+std::string resolvePath(const std::string& uri)
+{
+    if (uri == "/" || uri.empty())
+        return "./www/index.html";
+    return "./www" + uri;
 }
 }
 
@@ -121,10 +182,16 @@ void EventLoop::handleClientData(Client* client)
         client->appendToBuffer(buffer);
         
         const std::string& clientBuffer = client->getBuffer();
-        if (clientBuffer.find("\r\n\r\n") != std::string::npos)
+        const size_t headerEnd = clientBuffer.find("\r\n\r\n");
+        if (headerEnd != std::string::npos)
         {
+            const size_t bodyStart = headerEnd + 4;
+            const size_t contentLength = parseContentLengthHeader(clientBuffer.substr(0, bodyStart));
+            if (clientBuffer.size() < bodyStart + contentLength)
+                return;
+
             HttpRequest request;
-            request.parse(clientBuffer);
+            request.parse(clientBuffer.substr(0, bodyStart + contentLength));
             
             // Debug output
             std::cout << "[DEBUG] Method: " << request.getMethod() << std::endl;
@@ -136,30 +203,19 @@ void EventLoop::handleClientData(Client* client)
             response.setVersion("HTTP/1.1");
 
             const std::string method = request.getMethod();
-            const std::string uri = request.getUri();
+            const std::string uri = stripUriParams(request.getUri());
             std::string responseBody;
 
-            if (method != "GET")
-            {
-                response.setStatus("405 Method Not Allowed");
-                responseBody = "405 Method Not Allowed";
-                response.setBody(responseBody);
-                response.addHeader("Content-Type", "text/plain");
-            }
-            else if (uri.find("..") != std::string::npos || isHiddenUri(uri))
+            if (isBlockedUri(uri))
             {
                 response.setStatus("403 Forbidden");
                 responseBody = "<h1>403 Forbidden</h1>";
                 response.setBody(responseBody);
                 response.addHeader("Content-Type", "text/html");
             }
-            else
+            else if (method == "GET")
             {
-                std::string path;
-                if (uri == "/" || uri.empty())
-                    path = "./www/index.html";
-                else
-                    path = "./www" + uri;
+                const std::string path = resolvePath(uri);
 
                 std::ifstream file(path.c_str(), std::ios::in | std::ios::binary);
                 if (!file)
@@ -180,10 +236,52 @@ void EventLoop::handleClientData(Client* client)
                     response.addHeader("Content-Type", getContentType(path));
                 }
             }
+            else if (method == "POST")
+            {
+                response.setStatus("200 OK");
+                responseBody = "POST received: " + request.getBody();
+                response.setBody(responseBody);
+                response.addHeader("Content-Type", "text/plain");
+            }
+            else if (method == "DELETE")
+            {
+                const std::string path = resolvePath(uri);
+                struct stat pathStat;
 
-            std::ostringstream contentLength;
-            contentLength << response.getBody().size();
-            response.addHeader("Content-Length", contentLength.str());
+                if (stat(path.c_str(), &pathStat) != 0)
+                {
+                    response.setStatus("404 Not Found");
+                    responseBody = "404 Not Found";
+                    response.setBody(responseBody);
+                    response.addHeader("Content-Type", "text/plain");
+                }
+                else if (!S_ISREG(pathStat.st_mode))
+                {
+                    response.setStatus("403 Forbidden");
+                    responseBody = "<h1>403 Forbidden</h1>";
+                    response.setBody(responseBody);
+                    response.addHeader("Content-Type", "text/html");
+                }
+                else if (std::remove(path.c_str()) == 0)
+                {
+                    response.setStatus("200 OK");
+                    responseBody = "File deleted";
+                    response.setBody(responseBody);
+                    response.addHeader("Content-Type", "text/plain");
+                }
+                else
+                {
+                    response.setStatus("403 Forbidden");
+                    responseBody = "<h1>403 Forbidden</h1>";
+                    response.setBody(responseBody);
+                    response.addHeader("Content-Type", "text/html");
+                }
+            }
+            else
+            {
+                response.setMethodNotAllowed();
+            }
+
             response.addHeader("Connection", "close");
 
             std::string rawResponse = response.buildResponse();

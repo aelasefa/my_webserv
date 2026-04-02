@@ -30,6 +30,7 @@ public:
     
     // Build the HTTP response string
     std::string buildResponse() const;
+    void setMethodNotAllowed();
 
     // Backward-compatible alias
     std::string buildRawResponse() const;

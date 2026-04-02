@@ -25,6 +25,8 @@ public:
     const std::string& getVersion() const;
     const std::map<std::string, std::string>& getHeaders() const;
     const std::string& getBody() const;
+    bool hasBody() const;
+    size_t getContentLength() const;
     void parse(const std::string& rawRequest);
     bool isComplete() const;
 };

@@ -1,5 +1,22 @@
 #include "HttpRequest.hpp"
 #include <sstream>
+#include <stdexcept>
+
+namespace
+{
+size_t parseContentLengthValue(const std::string& value)
+{
+    if (value.empty())
+        return 0;
+
+    std::istringstream iss(value);
+    size_t length = 0;
+    char extra = 0;
+    if (!(iss >> length) || (iss >> extra))
+        return 0;
+    return length;
+}
+}
 
 HttpRequest::HttpRequest()
 {
@@ -59,6 +76,19 @@ const std::string& HttpRequest::getBody() const
     return _body;
 }
 
+bool HttpRequest::hasBody() const
+{
+    return !_body.empty();
+}
+
+size_t HttpRequest::getContentLength() const
+{
+    std::map<std::string, std::string>::const_iterator it = _headers.find("Content-Length");
+    if (it == _headers.end())
+        return 0;
+    return parseContentLengthValue(it->second);
+}
+
 void HttpRequest::parse(const std::string& rawRequest)
 {
     _method.clear();
@@ -67,7 +97,11 @@ void HttpRequest::parse(const std::string& rawRequest)
     _headers.clear();
     _body.clear();
 
-    std::istringstream stream(rawRequest);
+    const size_t headerEnd = rawRequest.find("\r\n\r\n");
+    if (headerEnd == std::string::npos)
+        throw std::runtime_error("Incomplete HTTP headers");
+
+    std::istringstream stream(rawRequest.substr(0, headerEnd));
     std::string line;
 
     if (!std::getline(stream, line))
@@ -106,8 +140,22 @@ void HttpRequest::parse(const std::string& rawRequest)
         _headers[key] = value;
     }
 
-    std::ostringstream bodyStream;
-    bodyStream << stream.rdbuf();
-    _body = bodyStream.str();
-    
+    const size_t bodyStart = headerEnd + 4;
+    const size_t contentLength = getContentLength();
+
+    if (contentLength > 0)
+    {
+        if (rawRequest.size() < bodyStart + contentLength)
+            throw std::runtime_error("Incomplete HTTP body");
+        _body = rawRequest.substr(bodyStart, contentLength);
+    }
+    else if (bodyStart < rawRequest.size())
+    {
+        _body = rawRequest.substr(bodyStart);
+    }
+}
+
+bool HttpRequest::isComplete() const
+{
+    return !_method.empty() && !_uri.empty() && !_version.empty() && _body.size() >= getContentLength();
 }
